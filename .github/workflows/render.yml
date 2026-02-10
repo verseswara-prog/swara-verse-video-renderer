@@ -1,1 +1,68 @@
+name: Render Video with FFmpeg
+
+on:
+  workflow_dispatch:
+    inputs:
+      images:
+        description: "Comma-separated image URLs"
+        required: true
+      voice_audio:
+        description: "Voice narration audio URL"
+        required: true
+      bg_music:
+        description: "Background music URL"
+        required: true
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Create workspace
+        run: mkdir -p work
+
+      - name: Download assets
+        run: |
+          IFS=',' read -ra IMGS <<< "${{ github.event.inputs.images }}"
+          i=1
+          for img in "${IMGS[@]}"; do
+            curl -L "$img" -o work/image_$i.jpg
+            i=$((i+1))
+          done
+
+          curl -L "${{ github.event.inputs.voice_audio }}" -o work/voice.mp3
+          curl -L "${{ github.event.inputs.bg_music }}" -o work/bg.mp3
+
+      - name: Build video
+        run: |
+          for img in work/image_*.jpg; do
+            echo "file '$img'" >> work/images.txt
+            echo "duration 4" >> work/images.txt
+          done
+
+          ffmpeg -y \
+            -f concat -safe 0 -i work/images.txt \
+            -i work/voice.mp3 \
+            -i work/bg.mp3 \
+            -filter_complex " \
+              [2:a]volume=0.15[a2]; \
+              [1:a][a2]amix=inputs=2:duration=shortest[aout] \
+            " \
+            -map 0:v -map "[aout]" \
+            -pix_fmt yuv420p \
+            -c:v libx264 \
+            -shortest \
+            work/final_video.mp4
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-video
+          path: work/final_video.mp4
 
