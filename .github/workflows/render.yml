@@ -9,9 +9,6 @@ on:
       voice_audio:
         description: "Voice narration audio URL"
         required: true
-      bg_music:
-        description: "Background music URL"
-        required: true
 
 jobs:
   render:
@@ -37,24 +34,20 @@ jobs:
           done
 
           curl -L "${{ github.event.inputs.voice_audio }}" -o work/voice.mp3
-          curl -L "${{ github.event.inputs.bg_music }}" -o work/bg.mp3
 
-      - name: Build video
+      - name: Build image sequence
         run: |
           for img in work/image_*.jpg; do
             echo "file '$img'" >> work/images.txt
             echo "duration 4" >> work/images.txt
           done
 
+      - name: Render Video
+        run: |
           ffmpeg -y \
             -f concat -safe 0 -i work/images.txt \
             -i work/voice.mp3 \
-            -i work/bg.mp3 \
-            -filter_complex " \
-              [2:a]volume=0.15[a2]; \
-              [1:a][a2]amix=inputs=2:duration=shortest[aout] \
-            " \
-            -map 0:v -map "[aout]" \
+            -map 0:v -map 1:a \
             -pix_fmt yuv420p \
             -c:v libx264 \
             -shortest \
@@ -65,4 +58,3 @@ jobs:
         with:
           name: final-video
           path: work/final_video.mp4
-
